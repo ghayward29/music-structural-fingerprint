@@ -4,3 +4,13 @@ __pycache__/
 .DS_Store
 uploads/*
 !uploads/.gitkeep
+data/rolls/human/*
+!data/rolls/human/.gitkeep
+data/rolls/ai/*
+!data/rolls/ai/.gitkeep
+data/human/*
+!data/human/.gitkeep
+data/ai/*
+!data/ai/.gitkeep
+classifier/model.pth
+classifier/training_curves.png

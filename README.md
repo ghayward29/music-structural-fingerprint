@@ -96,6 +96,65 @@ convert the graph to a PyTorch Geometric `Data` object, run it through the
 trained AutoSchA model, and return per-note Schenkerian depth scores
 (0.0 = ornamental, 1.0 = deep structural).
 
+## AI vs Human Classifier
+
+A CNN classifier that predicts whether a piece of music is AI-generated or
+human-composed, based solely on its piano-roll image.
+
+### How it works
+
+Each MIDI file is rendered as a 512×128 grayscale piano-roll image (time on
+the x-axis, pitch on the y-axis, time-normalised to fill the full width).  A
+small CNN is trained to distinguish the visual patterns of human vs AI
+composition.
+
+Architecture: `Conv(1→16) → ReLU → MaxPool` → `Conv(16→32) → ReLU → MaxPool`
+→ `AdaptiveAvgPool(4×4)` → `Linear(512→1)` → Sigmoid.
+
+### Step 1 — Collect training data
+
+Drop MIDI files into the appropriate folders:
+```
+data/human/   ← MIDI files of human-composed music
+data/ai/      ← MIDI files of AI-generated music
+```
+
+### Step 2 — Generate piano rolls
+
+```bash
+python make_rolls.py --input data/human/ --output data/rolls/human/
+python make_rolls.py --input data/ai/    --output data/rolls/ai/
+```
+
+Each MIDI becomes a 512×128 grayscale PNG saved in the rolls folder.
+
+### Step 3 — Train the classifier
+
+```bash
+python train_classifier.py
+# optional flags: --epochs 30  --lr 0.0005  --rolls data/rolls/
+```
+
+Trains for 20 epochs (80/20 split), prints accuracy and loss per epoch, saves:
+- `classifier/model.pth` — model weights
+- `classifier/training_curves.png` — accuracy plot
+
+### Step 4 — Predict on a new file
+
+```bash
+python predict.py path/to/file.mid
+# AI-generated probability: 0.87
+# → Likely AI-generated
+```
+
+### Via the web app
+
+The `/classify` route accepts a MIDI upload and returns:
+```json
+{ "ai_probability": 0.87 }
+```
+The probability bar is shown below the piano-roll visualisation in the UI.
+
 ## Web app
 
 A Flask UI wraps the pipeline so you can upload audio from the browser.

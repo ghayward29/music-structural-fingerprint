@@ -180,6 +180,43 @@
     .json-scroll::-webkit-scrollbar { width: 6px; }
     .json-scroll::-webkit-scrollbar-track { background: transparent; }
     .json-scroll::-webkit-scrollbar-thumb { background: #3b4567; border-radius: 3px; }
+
+    /* ── classifier section ── */
+    #classifySection {
+      width: 100%;
+      max-width: 680px;
+      margin-top: 2rem;
+    }
+
+    .classify-result {
+      margin-top: 1.25rem;
+      display: none;
+    }
+
+    .prob-label {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .prob-bar-track {
+      background: #2d3548;
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 0.5rem;
+    }
+
+    .prob-bar-fill {
+      height: 100%;
+      border-radius: 999px;
+      transition: width 0.5s ease;
+    }
+
+    .prob-verdict {
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
   </style>
 </head>
 <body>
@@ -217,6 +254,38 @@
         <div class="json-scroll" id="jsonOutput"></div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- ── AI Classifier ──────────────────────────────────────────────────── -->
+  <div id="classifySection">
+    <div class="card">
+      <div style="margin-bottom:1rem;">
+        <div style="font-weight:600; font-size:1rem; margin-bottom:0.3rem;">AI Detection</div>
+        <div style="color:#94a3b8; font-size:0.85rem;">
+          Upload a <strong style="color:#e2e8f0;">.mid</strong> file to predict whether it was AI-generated or human-composed.
+          Requires a trained model — run <code style="font-size:0.8rem; background:#151820; padding:1px 4px; border-radius:3px;">train_classifier.py</code> first.
+        </div>
+      </div>
+
+      <div class="drop-zone" id="midiDropZone">
+        <input type="file" id="midiInput" accept=".mid,.midi" />
+        <div class="drop-icon">🎹</div>
+        <p class="drop-label"><strong>Choose a MIDI file</strong> or drag and drop</p>
+        <p class="file-name" id="midiFileName"></p>
+      </div>
+
+      <button class="btn" id="classifyBtn" disabled>Classify</button>
+
+      <div class="status" id="classifyStatus"></div>
+
+      <div class="classify-result" id="classifyResult">
+        <div class="prob-label" id="probLabel"></div>
+        <div class="prob-bar-track">
+          <div class="prob-bar-fill" id="probBarFill"></div>
+        </div>
+        <div class="prob-verdict" id="probVerdict"></div>
+      </div>
     </div>
   </div>
 
@@ -309,6 +378,85 @@
     function setStatus(type, html) {
       statusEl.className = "status " + type;
       statusEl.innerHTML = html;
+    }
+
+    // ── AI classifier ───────────────────────────────────────────────────────
+    const midiInput      = document.getElementById("midiInput");
+    const midiDropZone   = document.getElementById("midiDropZone");
+    const midiFileName   = document.getElementById("midiFileName");
+    const classifyBtn    = document.getElementById("classifyBtn");
+    const classifyStatus = document.getElementById("classifyStatus");
+    const classifyResult = document.getElementById("classifyResult");
+    const probLabel      = document.getElementById("probLabel");
+    const probBarFill    = document.getElementById("probBarFill");
+    const probVerdict    = document.getElementById("probVerdict");
+
+    midiInput.addEventListener("change", () => {
+      const f = midiInput.files[0];
+      if (f) { midiFileName.textContent = f.name; classifyBtn.disabled = false; }
+    });
+
+    midiDropZone.addEventListener("dragover",  e => { e.preventDefault(); midiDropZone.classList.add("dragover"); });
+    midiDropZone.addEventListener("dragleave", () => midiDropZone.classList.remove("dragover"));
+    midiDropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      midiDropZone.classList.remove("dragover");
+      const f = e.dataTransfer.files[0];
+      if (f) {
+        const dt = new DataTransfer(); dt.items.add(f); midiInput.files = dt.files;
+        midiFileName.textContent = f.name; classifyBtn.disabled = false;
+      }
+    });
+
+    classifyBtn.addEventListener("click", async () => {
+      const file = midiInput.files[0];
+      if (!file) return;
+
+      classifyBtn.disabled = true;
+      classifyResult.style.display = "none";
+      setClassifyStatus("loading", '<span class="spinner"></span>Classifying…');
+
+      const form = new FormData();
+      form.append("midi", file);
+
+      try {
+        const res  = await fetch("/classify", { method: "POST", body: form });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          setClassifyStatus("error", "Error:\n" + (data.error || res.statusText));
+          return;
+        }
+
+        const prob = data.ai_probability;
+        const pct  = Math.round(prob * 100);
+
+        // Colour: green = human, red = AI, gradient through yellow
+        const r = Math.round(255 * prob);
+        const g = Math.round(255 * (1 - prob));
+        const barColor = `rgb(${r}, ${g}, 60)`;
+
+        probLabel.textContent       = `AI-generated probability: ${pct}%`;
+        probBarFill.style.width     = `${pct}%`;
+        probBarFill.style.background = barColor;
+        probVerdict.textContent     = prob >= 0.5
+          ? "→ Likely AI-generated"
+          : "→ Likely human-composed";
+        probVerdict.style.color = prob >= 0.5 ? "#f87171" : "#4ade80";
+
+        classifyResult.style.display = "block";
+        setClassifyStatus("success", "Classification complete.");
+
+      } catch (err) {
+        setClassifyStatus("error", "Network error: " + err.message);
+      } finally {
+        classifyBtn.disabled = false;
+      }
+    });
+
+    function setClassifyStatus(type, html) {
+      classifyStatus.className = "status " + type;
+      classifyStatus.innerHTML = html;
     }
   </script>
 </body>

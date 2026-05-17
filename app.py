@@ -3,11 +3,13 @@ app.py — Flask web interface for the music structural analysis pipeline.
 
 Routes:
     GET  /        — serves the upload UI (templates/index.html)
-    POST /analyze — accepts an audio file, runs the pipeline, returns JSON
+    POST /analyze  — accepts an audio file, runs the pipeline, returns JSON
+    POST /classify — accepts a MIDI file, returns AI-generated probability
     GET  /health  — liveness check
 
 Uploaded files are written to uploads/, processed, then deleted.
 All pipeline logic lives in pipeline.py and is imported directly.
+Classifier logic lives in predict.py and is imported directly.
 """
 
 import os
@@ -25,6 +27,10 @@ from pipeline import (
     visualize_graph,
     run_structural_analysis,
 )
+
+# Import classifier — classify_midi raises FileNotFoundError if the model
+# has not been trained yet; /classify handles that case gracefully.
+from predict import classify_midi
 
 app = Flask(__name__)
 
@@ -127,10 +133,50 @@ def analyze():
             os.remove(audio_path)
 
 
+@app.route("/classify", methods=["POST"])
+def classify():
+    """
+    Accept a MIDI file upload, run the piano-roll classifier, and return
+    the AI-generated probability as JSON: {"ai_probability": 0.87}
+    """
+    if "midi" not in request.files:
+        return jsonify({"error": "No file field named 'midi' in request."}), 400
+
+    file = request.files["midi"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected."}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in {".mid", ".midi"}:
+        return jsonify({"error": "Only .mid / .midi files are accepted."}), 400
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=UPLOAD_FOLDER, suffix=ext, delete=False
+    )
+    midi_path = tmp.name
+    try:
+        file.save(midi_path)
+        tmp.close()
+
+        prob = classify_midi(midi_path)
+        return jsonify({"ai_probability": prob})
+
+    except FileNotFoundError as exc:
+        # Model weights not yet trained.
+        return jsonify({"error": str(exc)}), 503
+
+    except Exception:
+        return jsonify({"error": traceback.format_exc()}), 500
+
+    finally:
+        if os.path.exists(midi_path):
+            os.remove(midi_path)
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    app.run(debug=True, host="0.0.0.0", port=5001)

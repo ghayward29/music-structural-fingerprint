@@ -96,6 +96,25 @@ convert the graph to a PyTorch Geometric `Data` object, run it through the
 trained AutoSchA model, and return per-note Schenkerian depth scores
 (0.0 = ornamental, 1.0 = deep structural).
 
+## Web app
+
+A Flask UI wraps the pipeline so you can upload audio from the browser.
+
+```bash
+source venv/bin/activate
+python app.py
+```
+
+Open [http://localhost:5000](http://localhost:5000), upload an MP3 or WAV, and
+click **Run Analysis**. The page returns the piano-roll visualisation and the
+raw JSON graph. The server exposes three routes:
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/` | GET | Upload UI |
+| `/analyze` | POST | Runs the pipeline; returns `{graph, image_b64, stats}` |
+| `/health` | GET | Returns `{"status": "ok"}` |
+
 ## Dependencies
 
 | Package | Purpose |

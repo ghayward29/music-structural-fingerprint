@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Structural Fingerprint</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 3rem 1.5rem;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.4rem;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.95rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .card {
+      background: #1e2330;
+      border: 1px solid #2d3548;
+      border-radius: 12px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    /* ── upload zone ── */
+    .drop-zone {
+      border: 2px dashed #3b4567;
+      border-radius: 8px;
+      padding: 2.5rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .drop-zone:hover,
+    .drop-zone.dragover { border-color: #6366f1; background: #1a1f35; }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+
+    .drop-label {
+      font-size: 0.95rem;
+      color: #94a3b8;
+    }
+    .drop-label strong { color: #e2e8f0; }
+
+    .file-name {
+      margin-top: 0.75rem;
+      font-size: 0.85rem;
+      color: #6366f1;
+      font-weight: 500;
+      min-height: 1.2em;
+    }
+
+    /* ── button ── */
+    .btn {
+      display: block;
+      width: 100%;
+      margin-top: 1.25rem;
+      padding: 0.8rem 1rem;
+      background: #6366f1;
+      color: #fff;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+    .btn:hover:not(:disabled) { background: #4f46e5; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── status / loading ── */
+    .status {
+      margin-top: 1.5rem;
+      font-size: 0.9rem;
+      min-height: 1.4em;
+    }
+    .status.loading { color: #94a3b8; }
+    .status.error   { color: #f87171; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; }
+    .status.success { color: #4ade80; }
+
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #475569;
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── results ── */
+    #results { display: none; width: 100%; max-width: 960px; margin-top: 2.5rem; }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+    @media (min-width: 800px) {
+      .results-grid { grid-template-columns: 1fr; } /* full-width stacked */
+    }
+
+    .result-card {
+      background: #1e2330;
+      border: 1px solid #2d3548;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .result-card-header {
+      padding: 0.85rem 1.25rem;
+      border-bottom: 1px solid #2d3548;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .badge {
+      background: #2d3548;
+      border-radius: 999px;
+      padding: 0.2rem 0.65rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .result-card img {
+      width: 100%;
+      display: block;
+    }
+
+    .json-scroll {
+      max-height: 380px;
+      overflow-y: auto;
+      padding: 1rem 1.25rem;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.75rem;
+      line-height: 1.6;
+      color: #94a3b8;
+      background: #151820;
+      white-space: pre;
+    }
+
+    /* scrollbar styling */
+    .json-scroll::-webkit-scrollbar { width: 6px; }
+    .json-scroll::-webkit-scrollbar-track { background: transparent; }
+    .json-scroll::-webkit-scrollbar-thumb { background: #3b4567; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+  <h1>Music Structural Fingerprint</h1>
+  <p class="subtitle">Upload an audio file to generate its note graph and piano-roll visualisation.</p>
+
+  <div class="card">
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".mp3,.wav" />
+      <div class="drop-icon">🎵</div>
+      <p class="drop-label"><strong>Choose a file</strong> or drag and drop here</p>
+      <p class="drop-label" style="margin-top:0.3rem; font-size:0.8rem;">MP3 or WAV</p>
+      <p class="file-name" id="fileName"></p>
+    </div>
+
+    <button class="btn" id="runBtn" disabled>Run Analysis</button>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div id="results">
+    <div class="results-grid">
+
+      <div class="result-card">
+        <div class="result-card-header">
+          Piano-roll graph
+          <span class="badge" id="statsBadge"></span>
+        </div>
+        <img id="pianoRoll" src="" alt="Piano-roll visualisation" />
+      </div>
+
+      <div class="result-card">
+        <div class="result-card-header">Raw JSON graph</div>
+        <div class="json-scroll" id="jsonOutput"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const fileInput  = document.getElementById("fileInput");
+    const dropZone   = document.getElementById("dropZone");
+    const fileName   = document.getElementById("fileName");
+    const runBtn     = document.getElementById("runBtn");
+    const statusEl   = document.getElementById("status");
+    const results    = document.getElementById("results");
+    const pianoRoll  = document.getElementById("pianoRoll");
+    const jsonOutput = document.getElementById("jsonOutput");
+    const statsBadge = document.getElementById("statsBadge");
+
+    // ── file selection ──────────────────────────────────────────────────────
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      if (file) {
+        fileName.textContent = file.name;
+        runBtn.disabled = false;
+      }
+    });
+
+    // drag-and-drop visual feedback
+    dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+    dropZone.addEventListener("drop", e => {
+      e.preventDefault();
+      dropZone.classList.remove("dragover");
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        // assign to the hidden input so FormData picks it up
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        fileInput.files = dt.files;
+        fileName.textContent = file.name;
+        runBtn.disabled = false;
+      }
+    });
+
+    // ── run analysis ────────────────────────────────────────────────────────
+    runBtn.addEventListener("click", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      // loading state
+      runBtn.disabled = true;
+      results.style.display = "none";
+      setStatus("loading", '<span class="spinner"></span>Transcribing audio and building note graph — this may take 15–30 seconds…');
+
+      const form = new FormData();
+      form.append("audio", file);
+
+      try {
+        const res  = await fetch("/analyze", { method: "POST", body: form });
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          setStatus("error", "Error:\n" + (data.error || res.statusText));
+          return;
+        }
+
+        // populate piano-roll
+        pianoRoll.src = "data:image/png;base64," + data.image_b64;
+
+        // populate JSON viewer — pretty-print, but truncate to first 200 edges
+        // so the browser doesn't freeze on large graphs
+        const display = {
+          stats:  data.stats,
+          nodes:  data.graph.nodes.slice(0, 50),
+          edges:  data.graph.edges.slice(0, 200),
+          "…":    "truncated for display — full graph available via POST /analyze",
+        };
+        jsonOutput.textContent = JSON.stringify(display, null, 2);
+
+        // badge
+        statsBadge.textContent =
+          `${data.stats.notes} notes · ${data.stats.edges} edges`;
+
+        results.style.display = "block";
+        setStatus("success", "Analysis complete.");
+
+      } catch (err) {
+        setStatus("error", "Network error: " + err.message);
+      } finally {
+        runBtn.disabled = false;
+      }
+    });
+
+    function setStatus(type, html) {
+      statusEl.className = "status " + type;
+      statusEl.innerHTML = html;
+    }
+  </script>
+</body>
+</html>

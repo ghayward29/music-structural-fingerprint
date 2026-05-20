@@ -96,6 +96,62 @@ convert the graph to a PyTorch Geometric `Data` object, run it through the
 trained AutoSchA model, and return per-note Schenkerian depth scores
 (0.0 = ornamental, 1.0 = deep structural).
 
+## Classifiers: surface vs structural
+
+Two complementary approaches classify a MIDI file as AI-generated or
+human-composed.  They answer different questions and are deliberately kept
+independent so each can be evaluated and improved separately.
+
+### Surface classifier (piano-roll CNN)
+
+**What it measures:** the visual appearance of the piano roll — which pixels
+are lit in a 512×128 grayscale image.  Captures note density patterns, rhythmic
+grids, and broad register usage that are visible at a glance.
+
+**Why it works:** AI-generated MIDIs from models like Suno often have
+characteristic textures — very even rhythmic grids, limited pitch variety in
+specific registers — that the CNN can learn from the image alone.
+
+**Why it's evasable:** re-quantizing, adding humanisation, or transposing a
+piece changes the piano roll substantially without changing its musical
+structure.  An adversary who knows the classifier uses images can modify the
+roll to shift predictions.
+
+### Structural classifier (logistic regression + random forest)
+
+**What it measures:** 14 hand-crafted features derived from music21 note data:
+interval distributions, harmonic rhythm, rhythmic CoV, stepwise motion ratio,
+pitch range, and phrase-ending cadences.  These target the compositional logic
+underneath the surface.
+
+**Why it's harder to evade:** these features describe *how* notes relate to
+each other structurally — voice-leading intervals, harmonic pacing, phrase
+articulation.  Changing timing or register shifts the piano roll but leaves
+most structural features intact.  An adversary would need to alter the
+underlying compositional decisions, not just the surface appearance.
+
+**Two models, two purposes:**
+- **Logistic regression** is interpretable: each feature has a signed
+  coefficient directly showing its direction and magnitude.  Use it to
+  understand *which* structural properties differ between AI and human music.
+- **Random forest** captures non-linear interactions (e.g. "high stepwise ratio
+  AND low rhythmic CV together") that logistic regression misses.  Use it when
+  accuracy matters more than interpretability.
+
+### Known limitations
+
+- **Training data is small.** ~100 AI files and ~200 human files is far too few
+  for robust generalisation.  Both classifiers will likely overfit.  Treat
+  predictions as exploratory signals, not reliable judgements.
+- **Tonic detection is approximate.** The cadence feature estimates the tonic as
+  the most common pitch class, which is wrong for modal, chromatic, or
+  modulatory music.
+- **AI samples are Suno-specific.** The classifier is trained on one AI source.
+  It may fail to detect AI music from Udio, MusicLM, or other generators.
+- **Human samples are not performance-diverse.** The Lakh MIDI Dataset is drawn
+  from commercial MIDI transcriptions, which are themselves often quantized and
+  may not reflect the full range of human compositional styles.
+
 ## AI vs Human Classifier
 
 A CNN classifier that predicts whether a piece of music is AI-generated or

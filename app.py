@@ -2,14 +2,16 @@
 app.py — Flask web interface for the music structural analysis pipeline.
 
 Routes:
-    GET  /        — serves the upload UI (templates/index.html)
-    POST /analyze  — accepts an audio file, runs the pipeline, returns JSON
-    POST /classify — accepts a MIDI file, returns AI-generated probability
-    GET  /health  — liveness check
+    GET  /                    — serves the upload UI (templates/index.html)
+    POST /analyze             — accepts an audio file, runs the pipeline, returns JSON
+    POST /classify            — accepts a MIDI file, returns piano-roll CNN probability
+    POST /classify_structural — accepts a MIDI file, returns structural classifier scores
+    GET  /health              — liveness check
 
 Uploaded files are written to uploads/, processed, then deleted.
 All pipeline logic lives in pipeline.py and is imported directly.
-Classifier logic lives in predict.py and is imported directly.
+Piano-roll classifier logic lives in predict.py and is imported directly.
+Structural classifier logic lives in predict_structural.py and is imported directly.
 """
 
 import os
@@ -31,6 +33,10 @@ from pipeline import (
 # Import classifier — classify_midi raises FileNotFoundError if the model
 # has not been trained yet; /classify handles that case gracefully.
 from predict import classify_midi
+
+# Import structural classifier — raises FileNotFoundError if either model pkl
+# is missing; /classify_structural surfaces this as a 503.
+from predict_structural import classify_structural
 
 app = Flask(__name__)
 
@@ -163,6 +169,46 @@ def classify():
 
     except FileNotFoundError as exc:
         # Model weights not yet trained.
+        return jsonify({"error": str(exc)}), 503
+
+    except Exception:
+        return jsonify({"error": traceback.format_exc()}), 500
+
+    finally:
+        if os.path.exists(midi_path):
+            os.remove(midi_path)
+
+
+@app.route("/classify_structural", methods=["POST"])
+def classify_structural_route():
+    """
+    Accept a MIDI file, run both structural classifiers, and return:
+        {"logreg_probability": 0.84, "rf_probability": 0.79}
+    Returns 503 if the models have not been trained yet.
+    """
+    if "midi" not in request.files:
+        return jsonify({"error": "No file field named 'midi' in request."}), 400
+
+    file = request.files["midi"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected."}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in {".mid", ".midi"}:
+        return jsonify({"error": "Only .mid / .midi files are accepted."}), 400
+
+    tmp = tempfile.NamedTemporaryFile(
+        dir=UPLOAD_FOLDER, suffix=ext, delete=False
+    )
+    midi_path = tmp.name
+    try:
+        file.save(midi_path)
+        tmp.close()
+
+        lr_prob, rf_prob = classify_structural(midi_path)
+        return jsonify({"logreg_probability": lr_prob, "rf_probability": rf_prob})
+
+    except FileNotFoundError as exc:
         return jsonify({"error": str(exc)}), 503
 
     except Exception:

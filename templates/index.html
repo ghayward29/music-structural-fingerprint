@@ -193,18 +193,36 @@
       display: none;
     }
 
-    .prob-label {
-      font-size: 1.1rem;
+    .score-block { margin-bottom: 1.1rem; }
+    .score-block:last-child { margin-bottom: 0; }
+
+    .score-header {
+      font-size: 0.78rem;
       font-weight: 600;
-      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 0.35rem;
+    }
+    .score-tag {
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+      color: #64748b;
+    }
+
+    .prob-label {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
     }
 
     .prob-bar-track {
       background: #2d3548;
       border-radius: 999px;
-      height: 10px;
+      height: 8px;
       overflow: hidden;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.35rem;
     }
 
     .prob-bar-fill {
@@ -214,8 +232,15 @@
     }
 
     .prob-verdict {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: #94a3b8;
+      margin-bottom: 0.5rem;
+    }
+
+    .score-divider {
+      border: none;
+      border-top: 1px solid #2d3548;
+      margin: 0.9rem 0;
     }
   </style>
 </head>
@@ -264,7 +289,7 @@
         <div style="font-weight:600; font-size:1rem; margin-bottom:0.3rem;">AI Detection</div>
         <div style="color:#94a3b8; font-size:0.85rem;">
           Upload a <strong style="color:#e2e8f0;">.mid</strong> file to predict whether it was AI-generated or human-composed.
-          Requires a trained model — run <code style="font-size:0.8rem; background:#151820; padding:1px 4px; border-radius:3px;">train_classifier.py</code> first.
+          Requires trained models — run <code style="font-size:0.8rem; background:#151820; padding:1px 4px; border-radius:3px;">train_classifier.py</code> and <code style="font-size:0.8rem; background:#151820; padding:1px 4px; border-radius:3px;">train_structural_classifier.py</code> first.
         </div>
       </div>
 
@@ -280,11 +305,33 @@
       <div class="status" id="classifyStatus"></div>
 
       <div class="classify-result" id="classifyResult">
-        <div class="prob-label" id="probLabel"></div>
-        <div class="prob-bar-track">
-          <div class="prob-bar-fill" id="probBarFill"></div>
+
+        <!-- Surface classifier: piano-roll CNN -->
+        <div class="score-block">
+          <div class="score-header">Surface classifier <span class="score-tag">(piano roll CNN)</span></div>
+          <div class="prob-label"     id="cnnLabel"></div>
+          <div class="prob-bar-track"><div class="prob-bar-fill" id="cnnBar"></div></div>
+          <div class="prob-verdict"   id="cnnVerdict"></div>
         </div>
-        <div class="prob-verdict" id="probVerdict"></div>
+
+        <hr class="score-divider" />
+
+        <!-- Structural classifier: logistic regression -->
+        <div class="score-block">
+          <div class="score-header">Structural classifier <span class="score-tag">(logistic regression)</span></div>
+          <div class="prob-label"     id="lrLabel"></div>
+          <div class="prob-bar-track"><div class="prob-bar-fill" id="lrBar"></div></div>
+          <div class="prob-verdict"   id="lrVerdict"></div>
+        </div>
+
+        <!-- Structural classifier: random forest -->
+        <div class="score-block">
+          <div class="score-header">Structural classifier <span class="score-tag">(random forest)</span></div>
+          <div class="prob-label"     id="rfLabel"></div>
+          <div class="prob-bar-track"><div class="prob-bar-fill" id="rfBar"></div></div>
+          <div class="prob-verdict"   id="rfVerdict"></div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -387,9 +434,6 @@
     const classifyBtn    = document.getElementById("classifyBtn");
     const classifyStatus = document.getElementById("classifyStatus");
     const classifyResult = document.getElementById("classifyResult");
-    const probLabel      = document.getElementById("probLabel");
-    const probBarFill    = document.getElementById("probBarFill");
-    const probVerdict    = document.getElementById("probVerdict");
 
     midiInput.addEventListener("change", () => {
       const f = midiInput.files[0];
@@ -408,44 +452,71 @@
       }
     });
 
+    // Render a probability score into a score block's three elements.
+    function renderScore(prob, labelEl, barEl, verdictEl) {
+      const pct = Math.round(prob * 100);
+      labelEl.textContent      = `AI-generated probability: ${pct}%`;
+      barEl.style.width        = `${pct}%`;
+      barEl.style.background   = `rgb(${Math.round(255*prob)}, ${Math.round(255*(1-prob))}, 60)`;
+      verdictEl.textContent    = prob >= 0.5 ? "→ Likely AI-generated" : "→ Likely human-composed";
+      verdictEl.style.color    = prob >= 0.5 ? "#f87171" : "#4ade80";
+    }
+
     classifyBtn.addEventListener("click", async () => {
       const file = midiInput.files[0];
       if (!file) return;
 
       classifyBtn.disabled = true;
       classifyResult.style.display = "none";
-      setClassifyStatus("loading", '<span class="spinner"></span>Classifying…');
+      setClassifyStatus("loading", '<span class="spinner"></span>Running surface + structural classifiers…');
 
-      const form = new FormData();
-      form.append("midi", file);
+      // Send to both endpoints in parallel — each needs its own FormData
+      // because the request body stream can only be consumed once.
+      const mkForm = () => { const f = new FormData(); f.append("midi", file); return f; };
 
       try {
-        const res  = await fetch("/classify", { method: "POST", body: form });
-        const data = await res.json();
+        const [resCNN, resSt] = await Promise.all([
+          fetch("/classify",            { method: "POST", body: mkForm() }),
+          fetch("/classify_structural", { method: "POST", body: mkForm() }),
+        ]);
 
-        if (!res.ok || data.error) {
-          setClassifyStatus("error", "Error:\n" + (data.error || res.statusText));
+        const [dataCNN, dataSt] = await Promise.all([resCNN.json(), resSt.json()]);
+
+        const errors = [];
+        if (!resCNN.ok || dataCNN.error) errors.push("Surface: " + (dataCNN.error || resCNN.statusText));
+        if (!resSt.ok  || dataSt.error)  errors.push("Structural: " + (dataSt.error  || resSt.statusText));
+
+        if (errors.length === 2) {          // both failed
+          setClassifyStatus("error", "Error:\n" + errors.join("\n"));
           return;
         }
 
-        const prob = data.ai_probability;
-        const pct  = Math.round(prob * 100);
+        // Populate whichever scores are available; show "N/A" for failures.
+        if (!resCNN.ok || dataCNN.error) {
+          document.getElementById("cnnLabel").textContent = "N/A (model not trained)";
+        } else {
+          renderScore(dataCNN.ai_probability,
+            document.getElementById("cnnLabel"),
+            document.getElementById("cnnBar"),
+            document.getElementById("cnnVerdict"));
+        }
 
-        // Colour: green = human, red = AI, gradient through yellow
-        const r = Math.round(255 * prob);
-        const g = Math.round(255 * (1 - prob));
-        const barColor = `rgb(${r}, ${g}, 60)`;
-
-        probLabel.textContent       = `AI-generated probability: ${pct}%`;
-        probBarFill.style.width     = `${pct}%`;
-        probBarFill.style.background = barColor;
-        probVerdict.textContent     = prob >= 0.5
-          ? "→ Likely AI-generated"
-          : "→ Likely human-composed";
-        probVerdict.style.color = prob >= 0.5 ? "#f87171" : "#4ade80";
+        if (!resSt.ok || dataSt.error) {
+          document.getElementById("lrLabel").textContent = "N/A (models not trained)";
+          document.getElementById("rfLabel").textContent = "N/A (models not trained)";
+        } else {
+          renderScore(dataSt.logreg_probability,
+            document.getElementById("lrLabel"),
+            document.getElementById("lrBar"),
+            document.getElementById("lrVerdict"));
+          renderScore(dataSt.rf_probability,
+            document.getElementById("rfLabel"),
+            document.getElementById("rfBar"),
+            document.getElementById("rfVerdict"));
+        }
 
         classifyResult.style.display = "block";
-        setClassifyStatus("success", "Classification complete.");
+        setClassifyStatus("success", errors.length ? `Classification complete (${errors[0]})` : "Classification complete.");
 
       } catch (err) {
         setClassifyStatus("error", "Network error: " + err.message);

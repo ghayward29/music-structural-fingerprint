@@ -1,69 +1,121 @@
 """
-make_rolls.py — batch-convert a folder of MIDI files to piano-roll PNGs.
+make_rolls.py — convert MIDI files to piano-roll PNGs for classifier training.
 
-Run this twice: once for human-composed MIDIs, once for AI-generated MIDIs.
+Processes both class folders in one run:
+    data/ai/          → data/rolls/ai/      (only .mid files — .mp3s are ignored)
+    data/human/midi/  → data/rolls/human/
+
+Each PNG is 512×128 pixels, grayscale, with time on the x-axis and pitch on
+the y-axis.  The time axis is normalised so every image is exactly 512 pixels
+wide regardless of piece duration — this makes the CNN invariant to tempo and
+lets it focus on compositional patterns rather than absolute timing.
+
+Image format details live in roll_utils.py; any change there automatically
+applies to both training-data generation and inference in predict.py.
 
 Usage:
-    python make_rolls.py --input data/human/ --output data/rolls/human/
-    python make_rolls.py --input data/ai/    --output data/rolls/ai/
-
-Each PNG is 512×128 pixels, grayscale, time-normalised — exactly the format
-the CNN classifier expects.  See roll_utils.py for rendering details.
+    python make_rolls.py
 """
 
-import argparse
 import glob
 import os
 import sys
 
 from roll_utils import midi_to_roll
 
+# ---------------------------------------------------------------------------
+# Source / destination pairs
+# ---------------------------------------------------------------------------
 
-def convert_folder(input_dir: str, output_dir: str) -> None:
-    os.makedirs(output_dir, exist_ok=True)
+# data/ai/ contains both .mid and .mp3 files (Suno exports audio alongside
+# MIDI).  We explicitly list only .mid here because .mp3 files cannot be
+# parsed as MIDI and would cause errors downstream.
+AI_SRC  = os.path.join("data", "ai")
+AI_DST  = os.path.join("data", "rolls", "ai")
 
-    # Collect .mid and .midi files, recursively so subfolders work too.
-    patterns = ["**/*.mid", "**/*.midi"]
-    midi_files = []
-    for pat in patterns:
-        midi_files.extend(glob.glob(os.path.join(input_dir, pat), recursive=True))
+# data/human/midi/ is the flat folder of 200 sampled Lakh MIDI files
+# produced by sample_human.py.  It contains .mid files only.
+HUMAN_SRC = os.path.join("data", "human", "midi")
+HUMAN_DST = os.path.join("data", "rolls", "human")
 
-    if not midi_files:
-        print(f"No MIDI files found in {input_dir}", file=sys.stderr)
-        sys.exit(1)
+JOBS = [
+    (AI_SRC,    AI_DST,    [".mid"]),          # AI: .mid only, not .mp3
+    (HUMAN_SRC, HUMAN_DST, [".mid", ".midi"]), # Human: standard MIDI extensions
+]
 
-    print(f"Converting {len(midi_files)} MIDI file(s) → {output_dir}")
 
-    ok = 0
-    for midi_path in sorted(midi_files):
+# ---------------------------------------------------------------------------
+# Core conversion
+# ---------------------------------------------------------------------------
+
+def convert_folder(src: str, dst: str, extensions: list[str]) -> tuple[int, int]:
+    """
+    Render every MIDI file in src (matching extensions) to a piano-roll PNG
+    in dst.  Returns (n_ok, n_failed).
+
+    Files are collected non-recursively from src because:
+    - data/ai/ is a flat folder (Suno exports are not nested)
+    - data/human/midi/ is also flat (sample_human.py copies into a flat dir)
+    Recursive glob is available via roll_utils if needed in future.
+    """
+    os.makedirs(dst, exist_ok=True)
+
+    # Collect files matching the allowed extensions (case-insensitive).
+    candidates = []
+    for fname in sorted(os.listdir(src)):
+        if os.path.splitext(fname)[1].lower() in extensions:
+            candidates.append(os.path.join(src, fname))
+
+    if not candidates:
+        print(f"  No files with extensions {extensions} found in {src}",
+              file=sys.stderr)
+        return 0, 0
+
+    ok = failed = 0
+    for midi_path in candidates:
+        stem    = os.path.splitext(os.path.basename(midi_path))[0]
+        out     = os.path.join(dst, f"{stem}.png")
         try:
-            img  = midi_to_roll(midi_path)
-            stem = os.path.splitext(os.path.basename(midi_path))[0]
-            out  = os.path.join(output_dir, f"{stem}.png")
+            img = midi_to_roll(midi_path)
             img.save(out)
-            print(f"  ✓  {os.path.relpath(midi_path)} → {os.path.relpath(out)}")
+            print(f"  ✓  {os.path.basename(midi_path)}")
             ok += 1
         except Exception as exc:
-            # Skip bad files rather than aborting the whole batch.
-            print(f"  ✗  {midi_path}: {exc}", file=sys.stderr)
+            # Log the failure and continue — one bad file should not abort the
+            # whole batch; we'll train on whatever rendered successfully.
+            print(f"  ✗  {os.path.basename(midi_path)}: {exc}", file=sys.stderr)
+            failed += 1
 
-    print(f"\nDone — {ok}/{len(midi_files)} converted successfully.")
+    return ok, failed
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Convert MIDI files to 512×128 piano-roll PNGs for classifier training.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
-    parser.add_argument("--input",  required=True, help="Folder of MIDI files to convert")
-    parser.add_argument("--output", required=True, help="Destination folder for PNG files")
-    args = parser.parse_args()
+    total_ok = total_fail = 0
 
-    if not os.path.isdir(args.input):
-        print(f"Error: input folder not found: {args.input}", file=sys.stderr)
+    for src, dst, exts in JOBS:
+        if not os.path.isdir(src):
+            print(f"\nSkipping {src}/ — directory not found.", file=sys.stderr)
+            print(f"  For the human set, run sample_human.py first.")
+            continue
+
+        n_src = sum(
+            1 for f in os.listdir(src)
+            if os.path.splitext(f)[1].lower() in exts
+        )
+        print(f"\n[{src}/ → {dst}/]  {n_src} file(s) to convert")
+
+        ok, fail = convert_folder(src, dst, exts)
+        total_ok   += ok
+        total_fail += fail
+        print(f"  → {ok} succeeded, {fail} failed")
+
+    print(f"\nAll done — {total_ok} PNGs written, {total_fail} failures.")
+    if total_fail:
         sys.exit(1)
-
-    convert_folder(args.input, args.output)
 
 
 if __name__ == "__main__":

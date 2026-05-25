@@ -14,13 +14,16 @@ Usage:
     python pipeline.py path/to/audio.mp3 [--output-dir out/]
 """
 
+import copy
 import sys
 import os
 import json
 import argparse
+import tempfile
 
 import numpy as np
 import music21
+import music21.stream
 import music21.tempo
 import networkx as nx
 import matplotlib
@@ -59,32 +62,64 @@ EDGE_COLORS = {
 # Step 1 — Audio → MIDI  (Basic Pitch)
 # ---------------------------------------------------------------------------
 
-def transcribe_audio(audio_path: str, output_dir: str) -> str:
+def _stem_to_part(midi_path: str, part_name: str) -> tuple[music21.stream.Part, int]:
+    """Parse a Basic Pitch MIDI and return a named music21 Part plus note count."""
+    parsed = music21.converter.parse(midi_path)
+    flat   = parsed.flatten()
+    part   = music21.stream.Part()
+    part.id       = part_name
+    part.partName = part_name
+    n_notes = 0
+    for element in flat.notes:
+        part.insert(element.offset, copy.deepcopy(element))
+        n_notes += len(element.pitches) if hasattr(element, "pitches") else 1
+    return part, n_notes
+
+
+def transcribe_audio(audio_path: str, output_dir: str) -> tuple[str, bool]:
     """
-    Run Spotify's Basic Pitch model on the audio file and write the resulting
-    MIDI to output_dir.  Basic Pitch performs polyphonic pitch detection
-    without a symbolic score, making it usable on any raw recording.
+    Transcribe audio to MIDI, preferring Demucs stem separation for accuracy.
 
-    Returns the path to the written MIDI file.
+    Attempts htdemucs 4-stem separation first: vocals, bass, and other stems
+    are each transcribed with Basic Pitch and merged into a multi-track MIDI.
+    Falls back to full-mix Basic Pitch if separation fails.
+
+    Returns (midi_path, stem_separated).
     """
-    print(f"[1/5] Transcribing audio with Basic Pitch: {audio_path}")
+    from separate_stems import separate_audio, transcribe_with_basic_pitch
 
-    # Load the ICASSP 2022 model once (avoids repeated deserialization if
-    # this function is called in a loop).
-    model = Model(ONNX_MODEL_PATH)
-
-    # predict() returns:
-    #   model_output — raw frame/onset/contour arrays (not used here)
-    #   midi_data    — pretty_midi.PrettyMIDI object ready to write
-    #   note_events  — list of (onset_s, offset_s, pitch, velocity, bends)
-    _model_output, midi_data, _note_events = predict(audio_path, model)
+    print(f"[1/5] Transcribing audio: {audio_path}")
 
     base_name = os.path.splitext(os.path.basename(audio_path))[0]
-    midi_path = os.path.join(output_dir, f"{base_name}.mid")
-    midi_data.write(midi_path)
 
+    with tempfile.TemporaryDirectory() as sep_tmp:
+        stem_paths = separate_audio(audio_path, sep_tmp)
+        if stem_paths:
+            print(f"    Stem separation succeeded ({len(stem_paths)} stems)")
+            parts: list[tuple[music21.stream.Part, int]] = []
+            for stem_path in stem_paths:
+                stem_name = os.path.splitext(os.path.basename(stem_path))[0]
+                try:
+                    mid = transcribe_with_basic_pitch(stem_path, sep_tmp)
+                    part, n = _stem_to_part(mid, stem_name)
+                    parts.append((part, n))
+                    print(f"      {stem_name}: {n} notes")
+                except Exception as exc:
+                    print(f"      {stem_name}: transcription failed ({exc})")
+            if parts:
+                midi_path = os.path.join(output_dir, f"{base_name}.mid")
+                score = music21.stream.Score()
+                for part, _ in parts:
+                    score.append(part)
+                score.write("midi", fp=midi_path)
+                print(f"    Merged MIDI written → {midi_path}")
+                return midi_path, True
+
+    print("    Falling back to full-mix transcription")
+    from separate_stems import transcribe_with_basic_pitch as _tbp
+    midi_path = _tbp(audio_path, output_dir)
     print(f"    MIDI written → {midi_path}")
-    return midi_path
+    return midi_path, False
 
 
 # ---------------------------------------------------------------------------
@@ -413,8 +448,8 @@ def main() -> None:
     base = os.path.splitext(os.path.basename(args.audio))[0]
 
     # Run the pipeline.
-    midi_path = transcribe_audio(args.audio, args.output_dir)
-    notes     = parse_midi(midi_path)
+    midi_path, _stem_sep = transcribe_audio(args.audio, args.output_dir)
+    notes                = parse_midi(midi_path)
 
     if not notes:
         print("No notes extracted — check the audio and Basic Pitch output.",

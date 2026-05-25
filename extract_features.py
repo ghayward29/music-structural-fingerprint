@@ -13,6 +13,7 @@ Can also be run standalone:
     python extract_features.py path/to/file.mid
 """
 
+import copy as _copy
 from collections import Counter
 from typing import Optional
 
@@ -313,6 +314,126 @@ def extract_features(midi_path: str) -> np.ndarray:
         # Return zeros rather than crashing — bad files get treated as "featureless"
         # and the model can down-weight them naturally through training.
         return np.zeros(N_FEATURES, dtype=np.float32)
+
+
+# ---------------------------------------------------------------------------
+# 28-feature melody-aware extraction
+# ---------------------------------------------------------------------------
+
+_VOCAL_KEYWORDS = frozenset({"vocal", "voice", "lead", "sing", "vox"})
+
+FEATURE_NAMES_28: list[str] = (
+    [f"mel_{n}" for n in FEATURE_NAMES] +
+    [f"all_{n}" for n in FEATURE_NAMES]
+)
+N_FEATURES_28 = len(FEATURE_NAMES_28)
+
+
+def _identify_melody_part(
+    score: music21.stream.Score,
+) -> "music21.stream.Part | None":
+    """
+    Find the melody part in a score.
+
+    Priority:
+      1. Part whose partName or id contains a vocal keyword.
+      2. Part whose first Instrument has a name containing a vocal keyword.
+      3. Part with the highest mean MIDI pitch (melody-on-top heuristic).
+    Returns None if the score has no pitched parts.
+    """
+    import music21.instrument as _m21_instr
+
+    # Pass 1: part name
+    for part in score.parts:
+        name = (getattr(part, "partName", "") or part.id or "").lower()
+        if any(kw in name for kw in _VOCAL_KEYWORDS):
+            return part
+
+    # Pass 2: instrument name
+    for part in score.parts:
+        for el in part.flatten().getElementsByClass(_m21_instr.Instrument):
+            iname = (el.instrumentName or "").lower()
+            if any(kw in iname for kw in _VOCAL_KEYWORDS):
+                return part
+
+    # Pass 3: highest mean pitch
+    best_part, best_mean = None, -1.0
+    for part in score.parts:
+        pitches: list[float] = []
+        for el in part.flatten().notesAndRests:
+            if isinstance(el, music21.note.Note):
+                pitches.append(float(el.pitch.midi))
+            elif isinstance(el, music21.chord.Chord):
+                pitches.append(float(max(n.pitch.midi for n in el.notes)))
+        if pitches:
+            m = sum(pitches) / len(pitches)
+            if m > best_mean:
+                best_mean = m
+                best_part = part
+    return best_part
+
+
+def extract_features_28(midi_path: str) -> np.ndarray:
+    """
+    Parse a MIDI and return a 28-element float32 feature vector.
+
+    Layout: [mel_feature_0 … mel_feature_13 | all_feature_0 … all_feature_13]
+
+    mel_* are computed on the melody part only (vocal part if present, otherwise
+    the part with the highest mean pitch).  all_* are computed on all parts
+    combined — identical to what extract_features() returns.
+    """
+    try:
+        score = music21.converter.parse(midi_path)
+        bpm   = _get_bpm(score)
+
+        # ── All-notes features (same as extract_features) ──────────────────
+        ivs_all = _collect_intervals(score)
+        abs_all = [abs(i) for i in ivs_all]
+        u_a, st_a, sk_a, lp_a, ll_a = _interval_histogram(abs_all)
+        hr_mn_a, hr_sd_a = _harmonic_rhythm(score, bpm)
+
+        all_vec = np.array([
+            float(np.mean(ivs_all)) if ivs_all else 0.0,
+            float(np.std(ivs_all))  if ivs_all else 0.0,
+            u_a, st_a, sk_a, lp_a, ll_a,
+            hr_mn_a, hr_sd_a,
+            _note_density(score, bpm),
+            _rhythmic_cv(score, bpm),
+            _pitch_range(score),
+            _stepwise_ratio(ivs_all),
+            _cadence_count(score, bpm),
+        ], dtype=np.float32)
+
+        # ── Melody-only features ────────────────────────────────────────────
+        mel_part = _identify_melody_part(score)
+        if mel_part is not None:
+            mel_score = music21.stream.Score()
+            mel_score.append(_copy.deepcopy(mel_part))
+
+            ivs_mel = _collect_intervals(mel_score)
+            abs_mel = [abs(i) for i in ivs_mel]
+            u_m, st_m, sk_m, lp_m, ll_m = _interval_histogram(abs_mel)
+            hr_mn_m, hr_sd_m = _harmonic_rhythm(mel_score, bpm)
+
+            mel_vec = np.array([
+                float(np.mean(ivs_mel)) if ivs_mel else 0.0,
+                float(np.std(ivs_mel))  if ivs_mel else 0.0,
+                u_m, st_m, sk_m, lp_m, ll_m,
+                hr_mn_m, hr_sd_m,
+                _note_density(mel_score, bpm),
+                _rhythmic_cv(mel_score, bpm),
+                _pitch_range(mel_score),
+                _stepwise_ratio(ivs_mel),
+                _cadence_count(mel_score, bpm),
+            ], dtype=np.float32)
+        else:
+            mel_vec = np.zeros(N_FEATURES, dtype=np.float32)
+
+        return np.concatenate([mel_vec, all_vec])
+
+    except Exception:
+        return np.zeros(N_FEATURES_28, dtype=np.float32)
 
 
 # ---------------------------------------------------------------------------

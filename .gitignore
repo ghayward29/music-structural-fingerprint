@@ -1,16 +1,69 @@
-venv/
+# ── Audio files — never commit ────────────────────────────────────────────────
+*.mp3
+*.wav
+*.flac
+*.m4a
+
+# ── Real song data — YouTube downloads, legally sensitive ─────────────────────
+data/sonics_real/
+data/human_audio/
+
+# ── SONICS real song metadata — contains YouTube IDs, do not share ────────────
+real_songs.csv
+real_sample_manifest.csv
+**/real_songs.csv
+**/real_sample_manifest.csv
+
+# ── Raw training audio — too large and legally sensitive ──────────────────────
+data/sonics_fake/
+data/ai/
+fma_small/
+clean_midi/
+stems/
+
+# ── Large data files ──────────────────────────────────────────────────────────
+*.tar.gz
+*.zip
+*.npz
+data/features/
+data/midi/
+data/rolls/
+data/human/lmd_matched/
+data/human/midi/
+data/artists/
+lmd_matched/
+
+# ── Credentials ───────────────────────────────────────────────────────────────
+kaggle.json
+.env
+
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
-*.py[cod]
+*.pyc
+venv/
+*.cpython-*.pyc
+
+# ── macOS ─────────────────────────────────────────────────────────────────────
 .DS_Store
+
+# ── Uploads (runtime temp files) ─────────────────────────────────────────────
 uploads/*
 !uploads/.gitkeep
+
+# ── Piano-roll image directories ──────────────────────────────────────────────
 data/rolls/human/*
 !data/rolls/human/.gitkeep
 data/rolls/ai/*
 !data/rolls/ai/.gitkeep
-data/human/*
-!data/human/.gitkeep
+
+# ── Keep data/ai/ skeleton but not contents ───────────────────────────────────
 data/ai/*
 !data/ai/.gitkeep
+
+# ── Keep data/human/ skeleton but not contents ────────────────────────────────
+data/human/*
+!data/human/.gitkeep
+
+# ── Trained CNN weights (large binary, not redistributed) ─────────────────────
 classifier/model.pth
 classifier/training_curves.png

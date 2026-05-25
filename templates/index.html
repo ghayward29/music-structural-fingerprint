@@ -3,532 +3,940 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Music Structural Fingerprint</title>
+  <title>StructuralPrint</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
+      background: #0f0f0f;
+      color: #e0e0e0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
+      font-size: 15px;
+      line-height: 1.6;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 3rem 1.5rem;
     }
 
-    h1 {
-      font-size: 1.75rem;
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    /* ── Header ── */
+    header { margin-bottom: 40px; }
+    header h1 {
+      font-size: 28px;
       font-weight: 700;
       letter-spacing: -0.5px;
-      margin-bottom: 0.4rem;
+      color: #fff;
+    }
+    header h1 span { color: #6c63ff; }
+    header p {
+      margin-top: 8px;
+      color: #888;
+      font-size: 14px;
+      max-width: 560px;
     }
 
-    .subtitle {
-      color: #94a3b8;
-      font-size: 0.95rem;
-      margin-bottom: 2.5rem;
-    }
-
-    .card {
-      background: #1e2330;
-      border: 1px solid #2d3548;
+    /* ── Upload zone ── */
+    #drop-zone {
+      border: 2px dashed #333;
       border-radius: 12px;
-      padding: 2rem;
-      width: 100%;
-      max-width: 680px;
-    }
-
-    /* ── upload zone ── */
-    .drop-zone {
-      border: 2px dashed #3b4567;
-      border-radius: 8px;
-      padding: 2.5rem 1rem;
+      padding: 48px 24px;
       text-align: center;
       cursor: pointer;
       transition: border-color 0.2s, background 0.2s;
-      position: relative;
+      background: #161616;
     }
-    .drop-zone:hover,
-    .drop-zone.dragover { border-color: #6366f1; background: #1a1f35; }
-
-    .drop-zone input[type="file"] {
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      cursor: pointer;
-      width: 100%;
-      height: 100%;
+    #drop-zone.drag-over {
+      border-color: #6c63ff;
+      background: #1a1830;
     }
+    #drop-zone .icon { font-size: 36px; margin-bottom: 12px; opacity: 0.5; }
+    #drop-zone p { color: #888; font-size: 14px; }
+    #drop-zone p strong { color: #6c63ff; cursor: pointer; }
+    #file-input { display: none; }
 
-    .drop-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
-
-    .drop-label {
-      font-size: 0.95rem;
-      color: #94a3b8;
-    }
-    .drop-label strong { color: #e2e8f0; }
-
-    .file-name {
-      margin-top: 0.75rem;
-      font-size: 0.85rem;
-      color: #6366f1;
-      font-weight: 500;
-      min-height: 1.2em;
+    #file-name {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #6c63ff;
+      min-height: 20px;
+      text-align: center;
     }
 
-    /* ── button ── */
-    .btn {
+    /* ── Submit button ── */
+    #submit-btn {
       display: block;
       width: 100%;
-      margin-top: 1.25rem;
-      padding: 0.8rem 1rem;
-      background: #6366f1;
+      margin-top: 16px;
+      padding: 14px;
+      background: #6c63ff;
       color: #fff;
-      font-size: 1rem;
+      font-size: 15px;
       font-weight: 600;
       border: none;
       border-radius: 8px;
       cursor: pointer;
       transition: background 0.2s, opacity 0.2s;
     }
-    .btn:hover:not(:disabled) { background: #4f46e5; }
-    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    #submit-btn:hover:not(:disabled) { background: #5a52e0; }
+    #submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── status / loading ── */
-    .status {
-      margin-top: 1.5rem;
-      font-size: 0.9rem;
-      min-height: 1.4em;
-    }
-    .status.loading { color: #94a3b8; }
-    .status.error   { color: #f87171; white-space: pre-wrap; font-family: monospace; font-size: 0.8rem; }
-    .status.success { color: #4ade80; }
-
+    /* ── Loading ── */
+    #loading { display: none; margin-top: 32px; text-align: center; }
     .spinner {
-      display: inline-block;
-      width: 14px; height: 14px;
-      border: 2px solid #475569;
-      border-top-color: #6366f1;
+      width: 36px;
+      height: 36px;
+      border: 3px solid #333;
+      border-top-color: #6c63ff;
       border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      margin-right: 6px;
-      vertical-align: middle;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── results ── */
-    #results { display: none; width: 100%; max-width: 960px; margin-top: 2.5rem; }
-
-    .results-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-    }
-    @media (min-width: 800px) {
-      .results-grid { grid-template-columns: 1fr; } /* full-width stacked */
+    #loading-msg {
+      color: #888;
+      font-size: 14px;
+      min-height: 22px;
+      transition: opacity 0.4s;
     }
 
-    .result-card {
-      background: #1e2330;
-      border: 1px solid #2d3548;
+    /* ── Error ── */
+    #error-box {
+      display: none;
+      margin-top: 24px;
+      background: #1e1010;
+      border: 1px solid #5c1f1f;
+      border-radius: 8px;
+      padding: 16px;
+      color: #f87171;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ── Results ── */
+    #results { display: none; margin-top: 40px; }
+
+    .result-block {
+      background: #161616;
+      border: 1px solid #222;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .result-block h2 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #555;
+      margin-bottom: 16px;
+    }
+
+    /* Piano roll */
+    #piano-roll-img { width: 100%; border-radius: 6px; display: block; }
+
+    /* Score bar */
+    .score-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .score-label { font-size: 13px; color: #888; min-width: 130px; flex-shrink: 0; }
+    .bar-track {
+      flex: 1;
+      height: 8px;
+      background: #222;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; width: 0%; }
+    .score-value {
+      font-size: 13px;
+      font-weight: 600;
+      min-width: 40px;
+      text-align: right;
+      color: #e0e0e0;
+    }
+
+    .verdict {
+      margin-top: 14px;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      display: inline-block;
+    }
+    .verdict.ai    { background: #1e1010; color: #f87171; border: 1px solid #5c1f1f; }
+    .verdict.human { background: #0e1e10; color: #4ade80; border: 1px solid #1f5c2a; }
+    .verdict.na    { background: #1a1a1a; color: #555;    border: 1px solid #2a2a2a; }
+
+    .explain {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #555;
+      line-height: 1.6;
+    }
+
+    /* Meta stats */
+    .meta-row { display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 20px; }
+    .meta-key { font-size: 11px; color: #555; text-transform: uppercase; letter-spacing: 0.07em; }
+    .meta-val { font-size: 22px; font-weight: 700; color: #e0e0e0; margin-top: 2px; }
+
+    /* Features table */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      text-align: left;
+      color: #555;
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      padding: 6px 8px;
+      border-bottom: 1px solid #222;
+    }
+    tbody td { padding: 8px 8px; border-bottom: 1px solid #1a1a1a; color: #ccc; }
+    tbody tr:last-child td { border-bottom: none; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    td.desc { color: #444; font-size: 12px; }
+
+    /* ── Classifier source label ── */
+    .source-tag {
+      font-size: 10px;
+      font-weight: 500;
+      color: #555;
+      border: 1px solid #2a2a2a;
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-left: 8px;
+      vertical-align: middle;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    /* ── Artist similarity ── */
+    .artist-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .artist-name {
+      font-size: 13px;
+      color: #ccc;
+      min-width: 170px;
+      flex-shrink: 0;
+    }
+    .in-range-badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: #4ade80;
+      border: 1px solid #1f5c2a;
+      background: #0e1e10;
+      border-radius: 4px;
+      padding: 1px 5px;
+      white-space: nowrap;
+    }
+    .artist-matches-null {
+      font-size: 13px;
+      color: #555;
+      padding: 8px 0;
+    }
+
+    /* ── Uncertain banner ── */
+    .uncertain-banner {
+      background: #1e1a08;
+      border: 1px solid #6b4f00;
+      border-radius: 8px;
+      padding: 14px 16px;
+      color: #f5c842;
+      font-size: 13px;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    /* ── LR attribution ── */
+    .attribution-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #1e1e1e;
+    }
+    .attribution-section h3 {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #555;
+      margin-bottom: 12px;
+    }
+    .attribution-cols {
+      display: flex;
+      gap: 16px;
+    }
+    .attribution-col { flex: 1; }
+    .attribution-col-label {
+      font-size: 11px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .attr-row { margin-bottom: 10px; }
+    .attr-desc { font-size: 12px; color: #ccc; line-height: 1.3; }
+    .attr-bar-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 3px;
+    }
+    .attr-bar {
+      height: 4px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .attr-num { font-size: 11px; color: #444; }
+
+    /* ── Stem badge ── */
+    .stem-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 4px;
+      padding: 2px 7px;
+      margin-top: 8px;
+      cursor: default;
+    }
+    .stem-badge.separated {
+      background: #0e1e10;
+      color: #4ade80;
+      border: 1px solid #1f5c2a;
+    }
+    .stem-badge.fullmix {
+      background: #1e1a08;
+      color: #f5c842;
+      border: 1px solid #6b4f00;
+    }
+
+    /* ── Model information collapsible ── */
+    .model-info-block {
+      margin-top: 16px;
+      background: #161616;
+      border: 1px solid #222;
       border-radius: 12px;
       overflow: hidden;
     }
-
-    .result-card-header {
-      padding: 0.85rem 1.25rem;
-      border-bottom: 1px solid #2d3548;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: #94a3b8;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .badge {
-      background: #2d3548;
-      border-radius: 999px;
-      padding: 0.2rem 0.65rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #cbd5e1;
-    }
-
-    .result-card img {
+    .model-info-toggle {
       width: 100%;
-      display: block;
-    }
-
-    .json-scroll {
-      max-height: 380px;
-      overflow-y: auto;
-      padding: 1rem 1.25rem;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-      font-size: 0.75rem;
-      line-height: 1.6;
-      color: #94a3b8;
-      background: #151820;
-      white-space: pre;
-    }
-
-    /* scrollbar styling */
-    .json-scroll::-webkit-scrollbar { width: 6px; }
-    .json-scroll::-webkit-scrollbar-track { background: transparent; }
-    .json-scroll::-webkit-scrollbar-thumb { background: #3b4567; border-radius: 3px; }
-
-    /* ── classifier section ── */
-    #classifySection {
-      width: 100%;
-      max-width: 680px;
-      margin-top: 2rem;
-    }
-
-    .classify-result {
-      margin-top: 1.25rem;
-      display: none;
-    }
-
-    .score-block { margin-bottom: 1.1rem; }
-    .score-block:last-child { margin-bottom: 0; }
-
-    .score-header {
-      font-size: 0.78rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: #94a3b8;
-      margin-bottom: 0.35rem;
-    }
-    .score-tag {
-      font-weight: 400;
-      text-transform: none;
-      letter-spacing: 0;
-      color: #64748b;
-    }
-
-    .prob-label {
-      font-size: 1rem;
-      font-weight: 600;
-      margin-bottom: 0.4rem;
-    }
-
-    .prob-bar-track {
-      background: #2d3548;
-      border-radius: 999px;
-      height: 8px;
-      overflow: hidden;
-      margin-bottom: 0.35rem;
-    }
-
-    .prob-bar-fill {
-      height: 100%;
-      border-radius: 999px;
-      transition: width 0.5s ease;
-    }
-
-    .prob-verdict {
-      font-size: 0.82rem;
-      color: #94a3b8;
-      margin-bottom: 0.5rem;
-    }
-
-    .score-divider {
+      background: none;
       border: none;
-      border-top: 1px solid #2d3548;
-      margin: 0.9rem 0;
+      text-align: left;
+      padding: 16px 24px;
+      cursor: pointer;
+      color: #555;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .model-info-toggle:hover { color: #888; }
+    .model-info-toggle .chevron { font-size: 9px; transition: transform 0.2s; }
+    .model-info-toggle.open .chevron { transform: rotate(90deg); }
+    .model-info-body {
+      display: none;
+      padding: 0 24px 20px;
+    }
+    .model-info-body.open { display: block; }
+    .model-row {
+      padding: 10px 0;
+      border-bottom: 1px solid #1a1a1a;
+      font-size: 12px;
+    }
+    .model-row:last-child { border-bottom: none; }
+    .model-row-name {
+      font-weight: 600;
+      color: #aaa;
+      margin-bottom: 3px;
+    }
+    .model-row-detail { color: #555; line-height: 1.5; }
+    .mismatch-flag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      background: #1e1a08;
+      color: #f5c842;
+      border: 1px solid #6b4f00;
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .ok-flag {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      background: #0e1e10;
+      color: #4ade80;
+      border: 1px solid #1f5c2a;
+      border-radius: 3px;
+      padding: 1px 5px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ── Disclaimer ── */
+    .disclaimer {
+      margin-top: 40px;
+      font-size: 12px;
+      color: #444;
+      line-height: 1.6;
+      border-top: 1px solid #1a1a1a;
+      padding-top: 24px;
     }
   </style>
 </head>
 <body>
+<div class="container">
 
-  <h1>Music Structural Fingerprint</h1>
-  <p class="subtitle">Upload an audio file to generate its note graph and piano-roll visualisation.</p>
+  <header>
+    <h1>Structural<span>Print</span></h1>
+    <p>
+      Upload an MP3 or WAV. The pipeline transcribes it to MIDI, builds a note graph,
+      and runs three independent classifiers to estimate whether the music is
+      AI-generated or human-composed.
+    </p>
+  </header>
 
-  <div class="card">
-    <div class="drop-zone" id="dropZone">
-      <input type="file" id="fileInput" accept=".mp3,.wav" />
-      <div class="drop-icon">🎵</div>
-      <p class="drop-label"><strong>Choose a file</strong> or drag and drop here</p>
-      <p class="drop-label" style="margin-top:0.3rem; font-size:0.8rem;">MP3 or WAV</p>
-      <p class="file-name" id="fileName"></p>
-    </div>
-
-    <button class="btn" id="runBtn" disabled>Run Analysis</button>
-
-    <div class="status" id="status"></div>
+  <div id="drop-zone">
+    <div class="icon">&#9835;</div>
+    <p>Drag &amp; drop an MP3 or WAV here, or <strong id="browse-link">browse</strong></p>
+    <input type="file" id="file-input" accept=".mp3,.wav" />
   </div>
+  <div id="file-name"></div>
+  <button id="submit-btn" disabled>Analyse</button>
+
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="loading-msg">Transcribing audio…</div>
+  </div>
+
+  <pre id="error-box"></pre>
 
   <div id="results">
-    <div class="results-grid">
 
-      <div class="result-card">
-        <div class="result-card-header">
-          Piano-roll graph
-          <span class="badge" id="statsBadge"></span>
+    <!-- Disagreement banner -->
+    <div id="uncertain-banner" class="uncertain-banner" style="display:none">
+      &#9888; Classifiers disagree on this file (range: <span id="uncertain-range"></span>%).
+      Treat this result with caution &mdash; the piece may have unusual structural characteristics
+      that fall outside the training distribution.
+    </div>
+
+    <!-- 1. Piano roll -->
+    <div class="result-block">
+      <h2>Piano Roll</h2>
+      <img id="piano-roll-img" src="" alt="Piano roll" />
+      <div id="stem-badge" style="display:none"></div>
+    </div>
+
+    <!-- 2. CNN score -->
+    <div class="result-block">
+      <h2>Surface Classifier &mdash; Piano-Roll CNN</h2>
+      <div class="score-row">
+        <span class="score-label">AI probability</span>
+        <div class="bar-track"><div class="bar-fill" id="cnn-bar"></div></div>
+        <span class="score-value" id="cnn-val">&mdash;</span>
+      </div>
+      <div id="cnn-verdict" class="verdict na">Model not trained</div>
+      <p class="explain">
+        Reads the visual texture of the piano roll — note density, rhythmic grid
+        regularity, and register usage. Fast and intuitive, but easy to fool by
+        re-quantising or transposing.
+      </p>
+    </div>
+
+    <!-- 3. Logistic regression score -->
+    <div class="result-block">
+      <h2>Structural Classifier &mdash; Logistic Regression <span id="lr-source-tag" class="source-tag" style="display:none"></span></h2>
+      <div class="score-row">
+        <span class="score-label">AI probability</span>
+        <div class="bar-track"><div class="bar-fill" id="lr-bar"></div></div>
+        <span class="score-value" id="lr-val">&mdash;</span>
+      </div>
+      <div id="lr-verdict" class="verdict na">Model not trained</div>
+      <p class="explain">
+        14 hand-crafted features: interval distributions, harmonic rhythm, rhythmic
+        variance, stepwise motion, pitch range, and cadence count. Each feature has a
+        signed coefficient you can inspect directly — fully interpretable.
+      </p>
+      <div id="lr-attribution" class="attribution-section" style="display:none">
+        <h3>Why this score?</h3>
+        <div class="attribution-cols">
+          <div class="attribution-col">
+            <div class="attribution-col-label" style="color:#f87171">&#9650; Pushed toward AI</div>
+            <div id="lr-ai-list"></div>
+          </div>
+          <div class="attribution-col">
+            <div class="attribution-col-label" style="color:#4ade80">&#9660; Pushed toward human</div>
+            <div id="lr-human-list"></div>
+          </div>
         </div>
-        <img id="pianoRoll" src="" alt="Piano-roll visualisation" />
       </div>
+    </div>
 
-      <div class="result-card">
-        <div class="result-card-header">Raw JSON graph</div>
-        <div class="json-scroll" id="jsonOutput"></div>
+    <!-- 4. Secondary structural classifier (L1 LR primary; RF when stems v2 unavailable) -->
+    <div class="result-block">
+      <h2><span id="secondary-clf-name">Structural Classifier &mdash; Sparse Logistic Regression (L1)</span> <span id="rf-source-tag" class="source-tag" style="display:none"></span></h2>
+      <div class="score-row">
+        <span class="score-label">AI probability</span>
+        <div class="bar-track"><div class="bar-fill" id="rf-bar"></div></div>
+        <span class="score-value" id="rf-val">&mdash;</span>
       </div>
+      <div id="rf-verdict" class="verdict na">Model not trained</div>
+      <p class="explain" id="secondary-clf-explain">
+        Uses L1 regularization to automatically select only the most predictive
+        structural features, zeroing out weak signals. More conservative than the
+        standard logistic regression.
+      </p>
+    </div>
 
+    <!-- 5. Artist structural similarity -->
+    <div class="result-block">
+      <h2>Artist Structural Similarity</h2>
+      <p class="explain" style="margin-bottom:16px">
+        Compares the structural features of this piece — interval patterns, voice leading,
+        harmonic rhythm — against fingerprints built from MIDI files by 15 major artists.
+        A high similarity score means this piece shares compositional patterns with that
+        artist's known work. This is not evidence of copying, but may indicate whose
+        structural vocabulary is reflected in the output.
+      </p>
+      <div id="artist-matches-content">
+        <!-- populated by JS -->
+      </div>
+      <p style="font-size:11px;color:#444;margin-top:14px">
+        Fingerprints built from 30 MIDI files per artist across 15 artists.
+      </p>
+    </div>
+
+    <!-- 6. Key features -->
+    <div class="result-block">
+      <h2>Key Structural Features</h2>
+      <div class="meta-row">
+        <div>
+          <div class="meta-key">Notes</div>
+          <div class="meta-val" id="stat-notes">&mdash;</div>
+        </div>
+        <div>
+          <div class="meta-key">Tempo</div>
+          <div class="meta-val" id="stat-tempo">&mdash;</div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th style="text-align:right">Value</th>
+            <th>What it measures</th>
+          </tr>
+        </thead>
+        <tbody id="features-body"></tbody>
+      </table>
+    </div>
+
+  </div><!-- /results -->
+
+  <!-- Model Information collapsible (always visible after first analysis) -->
+  <div id="model-info-section" class="model-info-block" style="display:none">
+    <button class="model-info-toggle" id="model-info-toggle" onclick="toggleModelInfo()">
+      <span class="chevron">&#9654;</span> Model Information
+    </button>
+    <div class="model-info-body" id="model-info-body">
+      <div id="model-info-content"><!-- populated by JS --></div>
     </div>
   </div>
 
-  <!-- ── AI Classifier ──────────────────────────────────────────────────── -->
-  <div id="classifySection">
-    <div class="card">
-      <div style="margin-bottom:1rem;">
-        <div style="font-weight:600; font-size:1rem; margin-bottom:0.3rem;">AI Detection</div>
-        <div style="color:#94a3b8; font-size:0.85rem;">
-          Upload a <strong style="color:#e2e8f0;">.mid</strong> file to predict whether it was AI-generated or human-composed.
-          Requires trained models — run <code style="font-size:0.8rem; background:#151820; padding:1px 4px; border-radius:3px;">train_classifier.py</code> and <code style="font-size:0.8rem; background:#151820; padding:1px 4px; border-radius:3px;">train_structural_classifier.py</code> first.
-        </div>
-      </div>
+  <p class="disclaimer">
+    <strong>Limitations:</strong> Models are trained on ~100 Suno AI files and ~200
+    Lakh MIDI human files — far too few for robust generalisation. Treat scores as
+    exploratory signals, not reliable judgements. The structural classifier is
+    Suno-specific and may not generalise to other AI generators. Tonic detection
+    used for cadence features is approximate.
+  </p>
 
-      <div class="drop-zone" id="midiDropZone">
-        <input type="file" id="midiInput" accept=".mid,.midi" />
-        <div class="drop-icon">🎹</div>
-        <p class="drop-label"><strong>Choose a MIDI file</strong> or drag and drop</p>
-        <p class="file-name" id="midiFileName"></p>
-      </div>
+</div><!-- /container -->
 
-      <button class="btn" id="classifyBtn" disabled>Classify</button>
+<script>
+  const FEATURE_META = {
+    interval_mean:       { label: "Interval mean",        desc: "Average melodic interval (semitones)" },
+    interval_std:        { label: "Interval std dev",      desc: "Spread of melodic intervals" },
+    interval_unison:     { label: "Unison fraction",       desc: "Fraction of repeated pitches" },
+    interval_step:       { label: "Step fraction",         desc: "Fraction of ±1–2 semitone moves" },
+    interval_skip:       { label: "Skip fraction",         desc: "Fraction of 3–4 semitone leaps" },
+    interval_leap:       { label: "Leap fraction",         desc: "Fraction of 5–7 semitone leaps" },
+    interval_large_leap: { label: "Large leap fraction",   desc: "Fraction of leaps ≥ 8 semitones" },
+    harm_rhythm_mean:    { label: "Harmonic rhythm mean",  desc: "Avg chord changes per second" },
+    harm_rhythm_std:     { label: "Harmonic rhythm std",   desc: "Regularity of chord changes" },
+    note_density:        { label: "Note density",          desc: "Notes per second" },
+    rhythmic_cv:         { label: "Rhythmic CV",           desc: "Coefficient of variation of note durations" },
+    pitch_range:         { label: "Pitch range",           desc: "Semitones from lowest to highest note" },
+    stepwise_ratio:      { label: "Stepwise ratio",        desc: "Fraction of conjunct (smooth) melodic motion" },
+    cadence_count:       { label: "Cadence count",         desc: "Estimated V→I cadences at phrase endings" },
+  };
 
-      <div class="status" id="classifyStatus"></div>
+  const dropZone   = document.getElementById("drop-zone");
+  const fileInput  = document.getElementById("file-input");
+  const browseLink = document.getElementById("browse-link");
+  const fileNameEl = document.getElementById("file-name");
+  const submitBtn  = document.getElementById("submit-btn");
+  const loadingEl  = document.getElementById("loading");
+  const loadingMsg = document.getElementById("loading-msg");
+  const errorBox   = document.getElementById("error-box");
+  const resultsEl  = document.getElementById("results");
 
-      <div class="classify-result" id="classifyResult">
+  // File selection
+  browseLink.addEventListener("click", () => fileInput.click());
+  dropZone.addEventListener("click",   () => fileInput.click());
 
-        <!-- Surface classifier: piano-roll CNN -->
-        <div class="score-block">
-          <div class="score-header">Surface classifier <span class="score-tag">(piano roll CNN)</span></div>
-          <div class="prob-label"     id="cnnLabel"></div>
-          <div class="prob-bar-track"><div class="prob-bar-fill" id="cnnBar"></div></div>
-          <div class="prob-verdict"   id="cnnVerdict"></div>
-        </div>
+  dropZone.addEventListener("dragover", e => {
+    e.preventDefault();
+    dropZone.classList.add("drag-over");
+  });
+  dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    dropZone.classList.remove("drag-over");
+    const f = e.dataTransfer.files[0];
+    if (f) setFile(f);
+  });
+  fileInput.addEventListener("change", () => {
+    if (fileInput.files[0]) setFile(fileInput.files[0]);
+  });
 
-        <hr class="score-divider" />
+  let selectedFile = null;
+  function setFile(f) {
+    selectedFile = f;
+    fileNameEl.textContent = f.name;
+    submitBtn.disabled = false;
+  }
 
-        <!-- Structural classifier: logistic regression -->
-        <div class="score-block">
-          <div class="score-header">Structural classifier <span class="score-tag">(logistic regression)</span></div>
-          <div class="prob-label"     id="lrLabel"></div>
-          <div class="prob-bar-track"><div class="prob-bar-fill" id="lrBar"></div></div>
-          <div class="prob-verdict"   id="lrVerdict"></div>
-        </div>
+  // Cycling loading messages
+  const MSGS = [
+    "Transcribing audio to MIDI…",
+    "Building note graph…",
+    "Running surface classifier…",
+    "Running structural classifiers…",
+  ];
+  let loadingTimer = null;
 
-        <!-- Structural classifier: random forest -->
-        <div class="score-block">
-          <div class="score-header">Structural classifier <span class="score-tag">(random forest)</span></div>
-          <div class="prob-label"     id="rfLabel"></div>
-          <div class="prob-bar-track"><div class="prob-bar-fill" id="rfBar"></div></div>
-          <div class="prob-verdict"   id="rfVerdict"></div>
-        </div>
+  function startLoading() {
+    let i = 0;
+    loadingMsg.textContent = MSGS[0];
+    loadingMsg.style.opacity = "1";
+    loadingTimer = setInterval(() => {
+      loadingMsg.style.opacity = "0";
+      setTimeout(() => {
+        i = (i + 1) % MSGS.length;
+        loadingMsg.textContent = MSGS[i];
+        loadingMsg.style.opacity = "1";
+      }, 400);
+    }, 2000);
+  }
 
-      </div>
-    </div>
-  </div>
+  function stopLoading() {
+    clearInterval(loadingTimer);
+    loadingEl.style.display = "none";
+  }
 
-  <script>
-    const fileInput  = document.getElementById("fileInput");
-    const dropZone   = document.getElementById("dropZone");
-    const fileName   = document.getElementById("fileName");
-    const runBtn     = document.getElementById("runBtn");
-    const statusEl   = document.getElementById("status");
-    const results    = document.getElementById("results");
-    const pianoRoll  = document.getElementById("pianoRoll");
-    const jsonOutput = document.getElementById("jsonOutput");
-    const statsBadge = document.getElementById("statsBadge");
+  // Submit
+  submitBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
 
-    // ── file selection ──────────────────────────────────────────────────────
-    fileInput.addEventListener("change", () => {
-      const file = fileInput.files[0];
-      if (file) {
-        fileName.textContent = file.name;
-        runBtn.disabled = false;
+    errorBox.style.display  = "none";
+    errorBox.textContent    = "";
+    resultsEl.style.display = "none";
+    document.getElementById("uncertain-banner").style.display    = "none";
+    document.getElementById("lr-attribution").style.display      = "none";
+    document.getElementById("artist-matches-content").innerHTML  = "";
+    document.getElementById("lr-source-tag").style.display       = "none";
+    document.getElementById("rf-source-tag").style.display       = "none";
+    document.getElementById("stem-badge").style.display          = "none";
+    loadingEl.style.display = "block";
+    submitBtn.disabled = true;
+    startLoading();
+
+    const fd = new FormData();
+    fd.append("audio", selectedFile);
+
+    try {
+      const res  = await fetch("/analyze", { method: "POST", body: fd });
+      const data = await res.json();
+      stopLoading();
+
+      if (!res.ok || data.error) {
+        errorBox.textContent   = data.error || "Unknown error";
+        errorBox.style.display = "block";
+        submitBtn.disabled = false;
+        return;
       }
-    });
 
-    // drag-and-drop visual feedback
-    dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("dragover"); });
-    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-    dropZone.addEventListener("drop", e => {
-      e.preventDefault();
-      dropZone.classList.remove("dragover");
-      const file = e.dataTransfer.files[0];
-      if (file) {
-        // assign to the hidden input so FormData picks it up
-        const dt = new DataTransfer();
-        dt.items.add(file);
-        fileInput.files = dt.files;
-        fileName.textContent = file.name;
-        runBtn.disabled = false;
-      }
-    });
-
-    // ── run analysis ────────────────────────────────────────────────────────
-    runBtn.addEventListener("click", async () => {
-      const file = fileInput.files[0];
-      if (!file) return;
-
-      // loading state
-      runBtn.disabled = true;
-      results.style.display = "none";
-      setStatus("loading", '<span class="spinner"></span>Transcribing audio and building note graph — this may take 15–30 seconds…');
-
-      const form = new FormData();
-      form.append("audio", file);
-
-      try {
-        const res  = await fetch("/analyze", { method: "POST", body: form });
-        const data = await res.json();
-
-        if (!res.ok || data.error) {
-          setStatus("error", "Error:\n" + (data.error || res.statusText));
-          return;
-        }
-
-        // populate piano-roll
-        pianoRoll.src = "data:image/png;base64," + data.image_b64;
-
-        // populate JSON viewer — pretty-print, but truncate to first 200 edges
-        // so the browser doesn't freeze on large graphs
-        const display = {
-          stats:  data.stats,
-          nodes:  data.graph.nodes.slice(0, 50),
-          edges:  data.graph.edges.slice(0, 200),
-          "…":    "truncated for display — full graph available via POST /analyze",
-        };
-        jsonOutput.textContent = JSON.stringify(display, null, 2);
-
-        // badge
-        statsBadge.textContent =
-          `${data.stats.notes} notes · ${data.stats.edges} edges`;
-
-        results.style.display = "block";
-        setStatus("success", "Analysis complete.");
-
-      } catch (err) {
-        setStatus("error", "Network error: " + err.message);
-      } finally {
-        runBtn.disabled = false;
-      }
-    });
-
-    function setStatus(type, html) {
-      statusEl.className = "status " + type;
-      statusEl.innerHTML = html;
+      renderResults(data);
+      resultsEl.style.display = "block";
+    } catch (err) {
+      stopLoading();
+      errorBox.textContent   = "Network error: " + err.message;
+      errorBox.style.display = "block";
     }
 
-    // ── AI classifier ───────────────────────────────────────────────────────
-    const midiInput      = document.getElementById("midiInput");
-    const midiDropZone   = document.getElementById("midiDropZone");
-    const midiFileName   = document.getElementById("midiFileName");
-    const classifyBtn    = document.getElementById("classifyBtn");
-    const classifyStatus = document.getElementById("classifyStatus");
-    const classifyResult = document.getElementById("classifyResult");
+    submitBtn.disabled = false;
+  });
 
-    midiInput.addEventListener("change", () => {
-      const f = midiInput.files[0];
-      if (f) { midiFileName.textContent = f.name; classifyBtn.disabled = false; }
-    });
+  // Rendering helpers
+  function probColor(p) {
+    return `hsl(${Math.round(120 * (1 - p))}, 75%, 48%)`;
+  }
 
-    midiDropZone.addEventListener("dragover",  e => { e.preventDefault(); midiDropZone.classList.add("dragover"); });
-    midiDropZone.addEventListener("dragleave", () => midiDropZone.classList.remove("dragover"));
-    midiDropZone.addEventListener("drop", e => {
-      e.preventDefault();
-      midiDropZone.classList.remove("dragover");
-      const f = e.dataTransfer.files[0];
-      if (f) {
-        const dt = new DataTransfer(); dt.items.add(f); midiInput.files = dt.files;
-        midiFileName.textContent = f.name; classifyBtn.disabled = false;
-      }
-    });
+  function renderScore(barId, valId, verdictId, prob) {
+    const bar     = document.getElementById(barId);
+    const valEl   = document.getElementById(valId);
+    const verdict = document.getElementById(verdictId);
 
-    // Render a probability score into a score block's three elements.
-    function renderScore(prob, labelEl, barEl, verdictEl) {
-      const pct = Math.round(prob * 100);
-      labelEl.textContent      = `AI-generated probability: ${pct}%`;
-      barEl.style.width        = `${pct}%`;
-      barEl.style.background   = `rgb(${Math.round(255*prob)}, ${Math.round(255*(1-prob))}, 60)`;
-      verdictEl.textContent    = prob >= 0.5 ? "→ Likely AI-generated" : "→ Likely human-composed";
-      verdictEl.style.color    = prob >= 0.5 ? "#f87171" : "#4ade80";
+    if (prob === null || prob === undefined) {
+      bar.style.width       = "0%";
+      valEl.textContent     = "—";
+      verdict.className     = "verdict na";
+      verdict.textContent   = "Model not trained";
+      return;
     }
 
-    classifyBtn.addEventListener("click", async () => {
-      const file = midiInput.files[0];
-      if (!file) return;
+    const pct = Math.round(prob * 100);
+    bar.style.width      = pct + "%";
+    bar.style.background = probColor(prob);
+    valEl.textContent    = pct + "%";
+    valEl.style.color    = probColor(prob);
 
-      classifyBtn.disabled = true;
-      classifyResult.style.display = "none";
-      setClassifyStatus("loading", '<span class="spinner"></span>Running surface + structural classifiers…');
-
-      // Send to both endpoints in parallel — each needs its own FormData
-      // because the request body stream can only be consumed once.
-      const mkForm = () => { const f = new FormData(); f.append("midi", file); return f; };
-
-      try {
-        const [resCNN, resSt] = await Promise.all([
-          fetch("/classify",            { method: "POST", body: mkForm() }),
-          fetch("/classify_structural", { method: "POST", body: mkForm() }),
-        ]);
-
-        const [dataCNN, dataSt] = await Promise.all([resCNN.json(), resSt.json()]);
-
-        const errors = [];
-        if (!resCNN.ok || dataCNN.error) errors.push("Surface: " + (dataCNN.error || resCNN.statusText));
-        if (!resSt.ok  || dataSt.error)  errors.push("Structural: " + (dataSt.error  || resSt.statusText));
-
-        if (errors.length === 2) {          // both failed
-          setClassifyStatus("error", "Error:\n" + errors.join("\n"));
-          return;
-        }
-
-        // Populate whichever scores are available; show "N/A" for failures.
-        if (!resCNN.ok || dataCNN.error) {
-          document.getElementById("cnnLabel").textContent = "N/A (model not trained)";
-        } else {
-          renderScore(dataCNN.ai_probability,
-            document.getElementById("cnnLabel"),
-            document.getElementById("cnnBar"),
-            document.getElementById("cnnVerdict"));
-        }
-
-        if (!resSt.ok || dataSt.error) {
-          document.getElementById("lrLabel").textContent = "N/A (models not trained)";
-          document.getElementById("rfLabel").textContent = "N/A (models not trained)";
-        } else {
-          renderScore(dataSt.logreg_probability,
-            document.getElementById("lrLabel"),
-            document.getElementById("lrBar"),
-            document.getElementById("lrVerdict"));
-          renderScore(dataSt.rf_probability,
-            document.getElementById("rfLabel"),
-            document.getElementById("rfBar"),
-            document.getElementById("rfVerdict"));
-        }
-
-        classifyResult.style.display = "block";
-        setClassifyStatus("success", errors.length ? `Classification complete (${errors[0]})` : "Classification complete.");
-
-      } catch (err) {
-        setClassifyStatus("error", "Network error: " + err.message);
-      } finally {
-        classifyBtn.disabled = false;
-      }
-    });
-
-    function setClassifyStatus(type, html) {
-      classifyStatus.className = "status " + type;
-      classifyStatus.innerHTML = html;
+    if (prob >= 0.5) {
+      verdict.className   = "verdict ai";
+      verdict.textContent = `Likely AI-generated (${pct}%)`;
+    } else {
+      verdict.className   = "verdict human";
+      verdict.textContent = `Likely human-composed (${100 - pct}% human)`;
     }
-  </script>
+  }
+
+  function renderResults(data) {
+    document.getElementById("piano-roll-img").src =
+      "data:image/png;base64," + data.piano_roll_image;
+
+    const stemBadge = document.getElementById("stem-badge");
+    if (data.stem_separated !== null && data.stem_separated !== undefined) {
+      const tooltip = "Stem-separated transcriptions are more accurate for structural analysis because Basic Pitch works better on isolated instruments than full mixes.";
+      if (data.stem_separated) {
+        stemBadge.className   = "stem-badge separated";
+        stemBadge.textContent = "✓ Stem-separated transcription";
+      } else {
+        stemBadge.className   = "stem-badge fullmix";
+        stemBadge.textContent = "⚠ Full-mix transcription";
+      }
+      stemBadge.title        = tooltip;
+      stemBadge.style.display = "inline-block";
+    } else {
+      stemBadge.style.display = "none";
+    }
+
+    renderScore("cnn-bar", "cnn-val", "cnn-verdict", data.piano_roll_probability);
+    renderScore("lr-bar",  "lr-val",  "lr-verdict",  data.logreg_probability);
+
+    // Secondary classifier: L1 LR (stems v2 active) or Random Forest (FMA fallback)
+    const secondaryProb = (data.lasso_probability != null)
+      ? data.lasso_probability : data.rf_probability;
+    document.getElementById("secondary-clf-name").textContent =
+      (data.lasso_probability != null)
+        ? "Structural Classifier — Sparse Logistic Regression (L1)"
+        : "Structural Classifier — Random Forest";
+    document.getElementById("secondary-clf-explain").textContent =
+      (data.lasso_probability != null)
+        ? "Uses L1 regularization to automatically select only the most predictive structural features, zeroing out weak signals. More conservative than the standard logistic regression."
+        : "200-tree forest on the same 14 features. Captures non-linear interactions that logistic regression misses. Typically more accurate but less interpretable.";
+    renderScore("rf-bar", "rf-val", "rf-verdict", secondaryProb);
+
+    // Disagreement banner
+    const banner = document.getElementById("uncertain-banner");
+    if (data.uncertain && data.score_range != null) {
+      document.getElementById("uncertain-range").textContent = Math.round(data.score_range * 100);
+      banner.style.display = "block";
+    } else {
+      banner.style.display = "none";
+    }
+
+    document.getElementById("stat-notes").textContent =
+      data.note_count != null ? data.note_count.toLocaleString() : "—";
+    document.getElementById("stat-tempo").textContent =
+      data.tempo != null ? Math.round(data.tempo) + " BPM" : "—";
+
+    const tbody = document.getElementById("features-body");
+    tbody.innerHTML = "";
+    if (data.features) {
+      for (const [key, val] of Object.entries(data.features)) {
+        const meta = FEATURE_META[key] || { label: key, desc: "" };
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          `<td>${meta.label}</td>` +
+          `<td class="num">${typeof val === "number" ? val.toFixed(4) : val}</td>` +
+          `<td class="desc">${meta.desc}</td>`;
+        tbody.appendChild(tr);
+      }
+    } else {
+      tbody.innerHTML =
+        '<tr><td colspan="3" style="color:#444">Feature extraction unavailable</td></tr>';
+    }
+
+    // Classifier source label
+    const lrTag = document.getElementById("lr-source-tag");
+    const rfTag = document.getElementById("rf-source-tag");
+    if (data.classifier_source) {
+      const label = "Trained on " + data.classifier_source;
+      lrTag.textContent = label; lrTag.style.display = "inline";
+      rfTag.textContent = label; rfTag.style.display = "inline";
+    } else {
+      lrTag.style.display = "none";
+      rfTag.style.display = "none";
+    }
+
+    // Artist structural similarity
+    const matchesEl = document.getElementById("artist-matches-content");
+    if (data.artist_matches && data.artist_matches.length > 0) {
+      matchesEl.innerHTML = data.artist_matches.map(m => {
+        const pct = Math.round(m.similarity * 100);
+        const badge = m.in_range
+          ? '<span class="in-range-badge">within normal range</span>'
+          : "";
+        return `<div class="artist-row">
+          <span class="artist-name">${m.artist} ${badge}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:#6c63ff"></div></div>
+          <span class="score-value" style="color:#6c63ff">${pct}%</span>
+        </div>`;
+      }).join("");
+    } else {
+      matchesEl.innerHTML =
+        '<p class="artist-matches-null">Artist fingerprints not built yet. ' +
+        'Run build_fingerprints.py to enable this feature.</p>';
+    }
+
+    // Model Information section
+    renderModelInfo(data);
+
+    // LR attribution ("Why this score?")
+    const attrEl = document.getElementById("lr-attribution");
+    if (data.lr_attribution) {
+      const allItems = [
+        ...data.lr_attribution.top_ai_features,
+        ...data.lr_attribution.top_human_features,
+      ];
+      const maxAbs = Math.max(...allItems.map(f => Math.abs(f.contribution)), 0.001);
+
+      function attrRow(f, color) {
+        const pct = Math.round(Math.abs(f.contribution) / maxAbs * 100);
+        const sign = f.contribution >= 0 ? "+" : "";
+        return `<div class="attr-row">
+          <div class="attr-desc">${f.plain_english}</div>
+          <div class="attr-bar-row">
+            <div class="attr-bar" style="width:${pct}%;background:${color};max-width:80px"></div>
+            <span class="attr-num">${sign}${f.contribution.toFixed(3)}</span>
+          </div>
+        </div>`;
+      }
+
+      document.getElementById("lr-ai-list").innerHTML =
+        data.lr_attribution.top_ai_features.map(f => attrRow(f, "#f87171")).join("");
+      document.getElementById("lr-human-list").innerHTML =
+        data.lr_attribution.top_human_features.map(f => attrRow(f, "#4ade80")).join("");
+      attrEl.style.display = "block";
+    } else {
+      attrEl.style.display = "none";
+    }
+  }
+  function toggleModelInfo() {
+    const btn  = document.getElementById("model-info-toggle");
+    const body = document.getElementById("model-info-body");
+    btn.classList.toggle("open");
+    body.classList.toggle("open");
+  }
+
+  // MODEL_REGISTRY is fetched once and cached.
+  let _registryCache = null;
+  async function fetchRegistry() {
+    if (_registryCache) return _registryCache;
+    try {
+      const r = await fetch("/model_registry");
+      if (r.ok) _registryCache = await r.json();
+    } catch (_) {}
+    return _registryCache;
+  }
+
+  async function renderModelInfo(data) {
+    const section = document.getElementById("model-info-section");
+    section.style.display = "block";
+
+    const registry = await fetchRegistry();
+    const el = document.getElementById("model-info-content");
+
+    // Upload context row
+    const sepLine = data.stem_separated === true
+      ? '<span class="ok-flag">stem-separated</span>'
+      : data.stem_separated === false
+        ? '<span class="mismatch-flag">full-mix</span>'
+        : "";
+    let html = `<div class="model-row">
+      <div class="model-row-name">This upload ${sepLine}</div>
+      <div class="model-row-detail">` +
+      (data.stem_separated === true
+        ? "Transcription used Demucs htdemucs stem separation + per-stem Basic Pitch. Results may differ from full-mix models' training distribution."
+        : data.stem_separated === false
+          ? "Transcription used full-mix Basic Pitch (Demucs separation failed or unavailable). Matches FMA audio model training pipeline."
+          : "Transcription method unknown.") +
+      `</div></div>`;
+
+    if (registry) {
+      const CLASSIFIER_KEYS = [
+        ["cnn",                           "Piano-Roll CNN"],
+        ["structural_logreg_sonics",       "LR L2 — SONICS (28-feat, primary)"],
+        ["structural_logreg_sonics_lasso", "LR Lasso (L1) — SONICS (28-feat, primary)"],
+        ["structural_logreg_stems_v2",    "LR v2 — Suno stems (28-feat, fallback)"],
+        ["structural_logreg_stems_lasso", "LR Lasso (L1) — Suno stems (28-feat, fallback)"],
+        ["structural_logreg_audio",       "LR — FMA audio (fallback)"],
+        ["structural_rf_audio",           "RF — FMA audio (fallback)"],
+        ["structural_logreg_stems",       "LR — Suno stems (14-feat, superseded)"],
+        ["structural_rf_stems",           "RF — Suno stems (14-feat, superseded)"],
+        ["structural_logreg",             "LR — Lakh baseline"],
+        ["structural_rf",                 "RF — Lakh baseline"],
+      ];
+      for (const [key, displayName] of CLASSIFIER_KEYS) {
+        const m = registry.models[key];
+        if (!m) continue;
+        const trained = m.last_trained ? `Last trained: ${m.last_trained}` : "Not yet trained";
+        const samples = (m.ai_samples != null && m.human_samples != null)
+          ? `${m.ai_samples} AI + ${m.human_samples} human = ${m.total_training_samples} total`
+          : "Sample counts unknown";
+        const accStr = m.reported_test_accuracy != null
+          ? `Test acc: ${Math.round(m.reported_test_accuracy * 100)}%`
+          : "";
+        const mismatchEl = m.training_inference_mismatch
+          ? '<span class="mismatch-flag">preprocessing mismatch</span>'
+          : '<span class="ok-flag">preprocessing coherent</span>';
+        html += `<div class="model-row">
+          <div class="model-row-name">${displayName} ${mismatchEl}</div>
+          <div class="model-row-detail">
+            AI: ${m.ai_source}<br>
+            Human: ${m.human_source}<br>
+            ${samples}${accStr ? " · " + accStr : ""} · ${trained}<br>
+            ${m.mismatch_description || ""}
+          </div>
+        </div>`;
+      }
+    } else {
+      html += `<div class="model-row"><div class="model-row-detail" style="color:#444">
+        Model registry unavailable. Add a <code>/model_registry</code> route to app.py.
+      </div></div>`;
+    }
+
+    el.innerHTML = html;
+  }
+</script>
 </body>
 </html>

@@ -85,6 +85,27 @@ Upload an audio file via the web UI or run the pipeline directly:
 python pipeline.py path/to/audio.mp3 --output-dir out/
 ```
 
+## Demo (fast, pre-baked)
+
+The shippable demo runs on precomputed data only — no Demucs / Basic Pitch / torch
+needed at runtime, so it loads instantly and always works. It shows the core finding
+(note-level vs. macro-structural vs. merged), honest held-out metrics, and an
+interactive gallery of 16 out-of-sample songs with a per-feature "why" breakdown
+and a guess-first *Detective mode*.
+
+```bash
+source venv/bin/activate
+python train_merged_model.py     # trains + saves classifier/structural_merged38.pkl
+python build_demo_data.py        # writes demo/gallery.json
+python serve_demo.py             # open http://localhost:5002
+```
+
+The improved **v6 merged 38-feature model** (28 note-level + 10 macro-structural,
+HistGradientBoosting) reaches **0.83 held-out accuracy / 0.92 AUC** — a real jump
+over the note-level-only model (~0.73 / 0.80). Macro features are audio-derived
+(chroma self-similarity, chorus edit-distance, chord compression), so they require
+audio, not just MIDI — which is why the demo ships pre-computed.
+
 ## Data
 
 ### AI training data

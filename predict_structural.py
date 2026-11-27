@@ -1,9 +1,13 @@
 """
-predict_structural.py — run both structural classifiers on a MIDI file.
+predict_structural.py — run the v1 (Lakh-baseline) structural classifiers on a MIDI file.
 
-Loads the logistic regression and random forest trained by
-train_structural_classifier.py and returns AI-generated probabilities
-from each model.
+Loads the 14-feature logistic regression and random forest archived under
+classifier/archive/ and returns AI-generated probabilities from each model.
+
+These are the original prototype models (see classifier/README.md, v1). They
+carry a training/inference transcription confound and are retained for
+comparison, not as reliable detectors. The current primary models are the
+SONICS 28-feature classifiers; see classifier/README.md.
 
 Usage:
     python predict_structural.py path/to/file.mid
@@ -19,8 +23,8 @@ import sys
 
 from extract_features import extract_features
 
-LOGREG_PATH = os.path.join(os.path.dirname(__file__), "classifier", "structural_logreg.pkl")
-RF_PATH     = os.path.join(os.path.dirname(__file__), "classifier", "structural_rf.pkl")
+LOGREG_PATH = os.path.join(os.path.dirname(__file__), "classifier", "archive", "v1_lakh_logreg.pkl")
+RF_PATH     = os.path.join(os.path.dirname(__file__), "classifier", "archive", "v1_lakh_rf.pkl")
 
 
 def _load_model(path: str):
@@ -28,7 +32,7 @@ def _load_model(path: str):
     if not os.path.exists(path):
         raise FileNotFoundError(
             f"Model not found at {path}. "
-            "Run build_feature_dataset.py then train_structural_classifier.py first."
+            "Expected the archived v1 model; see classifier/README.md for model versions."
         )
     with open(path, "rb") as fh:
         return pickle.load(fh)
